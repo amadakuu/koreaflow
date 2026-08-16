@@ -1,0 +1,6 @@
+{
+  "name": "HangeulFlow",
+  "description": "Aplikasi belajar bahasa Korea cerdas berbasis AI dengan dashboard progres, kamus SRS flashcard, latihan soal adaptif, dan cerita interaktif.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
