@@ -1,6 +1,5 @@
-import { getSession } from '../../../functions/_lib/auth.js';
-import { first } from '../../../functions/_lib/db.js';
-import { json } from '../../../functions/_lib/db.js';
+import { getSession } from '../../_lib/auth.js';
+import { first, json } from '../../_lib/db.js';
 
 export async function onRequestGet({ request, env }) {
   const session = await getSession(request, env.SESSION_SECRET);
