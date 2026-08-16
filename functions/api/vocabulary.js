@@ -12,11 +12,13 @@ export async function onRequestGet({ request, env }) {
   if (!user) return json({ error: 'Unauthorized' }, 401);
   const url = new URL(request.url);
   const q = (url.searchParams.get('q') || '').trim();
-  const level = url.searchParams.get('level');
+  const min = url.searchParams.get('min');
+  const max = url.searchParams.get('max');
   let sql = 'SELECT * FROM vocabulary WHERE user_id = ?';
   const params = [user.id];
   if (q) { sql += ' AND (kata_korea LIKE ? OR terjemahan_indo LIKE ?)'; params.push(`%${q}%`, `%${q}%`); }
-  if (level !== null && level !== '' && Number.isFinite(Number(level))) { sql += ' AND level_hafalan BETWEEN ? AND ?'; const n = Math.max(0, Math.min(100, Number(level))); params.push(n, n); }
+  if (min !== null && min !== '' && Number.isFinite(Number(min))) { sql += ' AND level_hafalan >= ?'; params.push(Math.max(0, Math.min(100, Number(min)))); }
+  if (max !== null && max !== '' && Number.isFinite(Number(max))) { sql += ' AND level_hafalan <= ?'; params.push(Math.max(0, Math.min(100, Number(max)))); }
   sql += ' ORDER BY created_at DESC';
   const result = await query(env.DB, sql, params);
   return json({ data: result.results });
@@ -29,6 +31,8 @@ export async function onRequestPost({ request, env }) {
   const kata = String(body.kata_korea || '').trim();
   const translation = String(body.terjemahan_indo || '').trim();
   if (!kata || !translation) return json({ error: 'Kata dan terjemahan wajib diisi.' }, 400);
+  const existing = await first(env.DB, 'SELECT * FROM vocabulary WHERE user_id = ? AND kata_korea = ?', [user.id, kata]);
+  if (existing) return json({ data: existing, existing: true });
   const id = newId('voc');
   await run(env.DB, `INSERT INTO vocabulary (id,user_id,kata_korea,terjemahan_indo,contoh_kalimat_korea,contoh_kalimat_indo,level_hafalan,jumlah_benar,jumlah_salah) VALUES (?,?,?,?,?, ?,0,0,0)`, [id, user.id, kata, translation, body.contoh_kalimat_korea || null, body.contoh_kalimat_indo || null]);
   const item = await first(env.DB, 'SELECT * FROM vocabulary WHERE id = ?', [id]);
@@ -42,8 +46,10 @@ export async function onRequestPut({ request, env }) {
   const id = String(body.id || '');
   const item = await first(env.DB, 'SELECT * FROM vocabulary WHERE id = ? AND user_id = ?', [id, user.id]);
   if (!item) return json({ error: 'Kosakata tidak ditemukan.' }, 404);
-  const level = Math.max(0, Math.min(100, Number(body.level_hafalan ?? item.level_hafalan)));
-  const delta = body.hasil === 'benar' ? { benar: item.jumlah_benar + 1, salah: item.jumlah_salah } : body.hasil === 'salah' ? { benar: item.jumlah_benar, salah: item.jumlah_salah + 1 } : { benar: item.jumlah_benar, salah: item.jumlah_salah };
-  await run(env.DB, 'UPDATE vocabulary SET level_hafalan = ?, jumlah_benar = ?, jumlah_salah = ? WHERE id = ? AND user_id = ?', [level, delta.benar, delta.salah, id, user.id]);
+
+  const hasil = body.hasil === 'benar' ? 'benar' : body.hasil === 'salah' ? 'salah' : null;
+  if (!hasil) return json({ error: 'hasil harus benar atau salah.' }, 400);
+  const nextLevel = hasil === 'benar' ? Math.min(100, item.level_hafalan + 8) : Math.max(0, item.level_hafalan - 10);
+  await run(env.DB, `UPDATE vocabulary SET level_hafalan = ?, jumlah_benar = jumlah_benar + ?, jumlah_salah = jumlah_salah + ? WHERE id = ? AND user_id = ?`, [nextLevel, hasil === 'benar' ? 1 : 0, hasil === 'salah' ? 1 : 0, id, user.id]);
   return json({ data: await first(env.DB, 'SELECT * FROM vocabulary WHERE id = ?', [id]) });
 }
